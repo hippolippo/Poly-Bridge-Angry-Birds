@@ -25,11 +25,15 @@ namespace AngryBirds {
     
     public class AngryBirds : PolyTechMod {
 
+        public static GameObject slingshotString;
+        public static LineRenderer slingshotLine;
+
         public static Vector3 pullStart;
+        public static Vector3 carStart;
         public static FieldInfo allBodies = typeof(PolyPhysics.Vehicle).GetField("allBodies", BindingFlags.NonPublic | BindingFlags.Instance);
         public static FieldInfo m_Physics = typeof(Vehicle).GetField("m_Physics", BindingFlags.NonPublic | BindingFlags.Instance);
-
         public static FieldInfo motion = typeof(PolyPhysics.Rigidbody).GetField("motion", BindingFlags.NonPublic | BindingFlags.Instance);
+        public static FieldInfo _t2 = typeof(PolyPhysics.Rigidbody).GetField("_t2", BindingFlags.NonPublic | BindingFlags.Instance);
 
         public static ControlState controlState = ControlState.NON_SIM;
         public const string pluginGuid = "polytech.AngryBirds";
@@ -88,19 +92,43 @@ namespace AngryBirds {
             if(controlState == ControlState.WAITING){
                 if(Input.GetMouseButton(0)){
                     Logger.LogInfo("PULLING");
+                    Logger.LogInfo("trying to draw a line");
                     controlState = ControlState.PULLING;
                     pullStart = Input.mousePosition;
+                    carStart = (Vector3)Vehicles[0].transform.position;
+                    slingshotString = new GameObject();
+                    slingshotString.transform.position = pullStart;
+                    slingshotString.AddComponent<LineRenderer>();
+                    slingshotLine = slingshotString.GetComponent<LineRenderer>();
+                    slingshotLine.material = new Material(Shader.Find("Sprites/Default"));
+                    slingshotLine.startColor = new Color(1f,1f,1f,1f);
+                    slingshotLine.endColor = new Color(1f,1f,1f,1f);
+                    slingshotLine.startWidth = .1f;
+                    slingshotLine.endWidth = .1f;
+                    slingshotLine.positionCount = 2;
+                    slingshotLine.SetPosition(0, carStart);
+                    slingshotLine.SetPosition(1, carStart);
+                    //slingshotLine.SetPositions(new Vector3[]{carStart, Input.mousePosition});
                 }
             } else if (controlState == ControlState.PULLING){
                 if(!Input.GetMouseButton(0)){
                     Logger.LogInfo("RELEASE");
+                    GameObject.Destroy(slingshotString);
                     controlState = ControlState.MOVING;
                     Vector3 restoring3 = pullStart - Input.mousePosition;
                     Vector2 restoring2 = new Vector2(restoring3.x, restoring3.y);
                     PolyPhysics.Rigidbody[] bodies = (PolyPhysics.Rigidbody[])allBodies.GetValue((PolyPhysics.Vehicle)m_Physics.GetValue(Vehicles[0]));
                     foreach(PolyPhysics.Rigidbody body in bodies){
                         Poly.Physics.Solver.Motion vehicleMotion = ((Poly.Physics.Solver.Motion)motion.GetValue(body));
-                        vehicleMotion.linVel = restoring2 * .001f;
+                        vehicleMotion.linVel = restoring2 * .0005f;
+                        motion.SetValue(body,vehicleMotion);
+                    }
+                }else{
+                    slingshotLine.SetPosition(1, carStart + .005f * (Input.mousePosition - pullStart));
+                    PolyPhysics.Rigidbody[] bodies = (PolyPhysics.Rigidbody[])allBodies.GetValue((PolyPhysics.Vehicle)m_Physics.GetValue(Vehicles[0]));
+                    foreach(PolyPhysics.Rigidbody body in bodies){
+                        Poly.Physics.Solver.Motion vehicleMotion = ((Poly.Physics.Solver.Motion)motion.GetValue(body));
+                        vehicleMotion.com = carStart + .005f * (Input.mousePosition - pullStart);
                         motion.SetValue(body,vehicleMotion);
                     }
                 }
@@ -131,7 +159,7 @@ namespace AngryBirds {
         private static void VehicleAddedToSimulation(GameObject physicsVehicle, ref Vehicle __instance, ref bool __runOriginal){
             _instance.Logger.LogInfo("Vehicle Added to Simulation!");
             _instance.Logger.LogInfo(physicsVehicle);
-            __instance.m_MeshRenderer.enabled = false;
+            //__instance.m_MeshRenderer.enabled = false;
             VehicleObjects = VehicleObjects.Concat(new GameObject[] {physicsVehicle}).ToArray();
             Vehicles = Vehicles.Concat(new Vehicle[] {__instance}).ToArray();
             GameObject cube = GameObject.CreatePrimitive(PrimitiveType.Cube);
