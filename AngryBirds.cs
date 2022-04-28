@@ -40,6 +40,7 @@ namespace AngryBirds {
     }
     public static class PullManager{
         public static FieldInfo allBodies = typeof(PolyPhysics.Vehicle).GetField("allBodies", BindingFlags.NonPublic | BindingFlags.Instance);
+        public static FieldInfo chassis = typeof(PolyPhysics.Vehicle).GetField("chassis", BindingFlags.NonPublic | BindingFlags.Instance);
         public static FieldInfo m_Physics = typeof(Vehicle).GetField("m_Physics", BindingFlags.NonPublic | BindingFlags.Instance);
         public static FieldInfo motion = typeof(PolyPhysics.Rigidbody).GetField("motion", BindingFlags.NonPublic | BindingFlags.Instance);
         public const float max_pull = 2f;
@@ -49,9 +50,10 @@ namespace AngryBirds {
         public static LineRenderer stringRenderer;
         public static Vector3 mouseStart;
         public static Vector3 pullStart;
-        public static Vector3 offset(Vehicle vehicle){
+        public static Vector3[] bodyComs;
+        public static float offset(Vehicle vehicle){
             // TODO: implement a switch for different types of vehicles
-            return new Vector3(-1f, 0f, 0f);
+            return 1f;
         }
         public static void enter(){
             // vv This Code is Temporary and should be removed
@@ -70,7 +72,9 @@ namespace AngryBirds {
             stringRenderer.endWidth = .1f;
             stringRenderer.positionCount = 2;
             stringRenderer.SetPosition(0, pullStart);
-            stringRenderer.SetPosition(1, pullStart + offset(GlobalManager.current_vehicle));
+            stringRenderer.SetPosition(1, pullStart);
+            PolyPhysics.Rigidbody[] bodies = (PolyPhysics.Rigidbody[])allBodies.GetValue((PolyPhysics.Vehicle)m_Physics.GetValue(GlobalManager.current_vehicle));
+            bodyComs = (from body in bodies select ((Vector3)((Poly.Physics.Solver.Motion)motion.GetValue(body)).com - GlobalManager.current_vehicle.transform.position)).ToArray();
         }
 
         public static void tick(){
@@ -78,7 +82,16 @@ namespace AngryBirds {
             if(pull_difference.magnitude > max_pull){
                 pull_difference = Vector3.ClampMagnitude(pull_difference, max_pull);
             }
-            stringRenderer.SetPosition(1, pullStart + pull_difference + offset(GlobalManager.current_vehicle));
+            float off = offset(GlobalManager.current_vehicle);
+            Vector3 displace = Vector3.ClampMagnitude(100*(Input.mousePosition - mouseStart), 1) * off;
+            stringRenderer.SetPosition(1, pullStart + pull_difference + displace);
+            PolyPhysics.Rigidbody[] chass = (PolyPhysics.Rigidbody[])allBodies.GetValue((PolyPhysics.Vehicle)m_Physics.GetValue(GlobalManager.current_vehicle));
+            for(int i = 0; i < chass.Count(); i++){
+                Poly.Physics.Solver.Motion mot = (Poly.Physics.Solver.Motion)motion.GetValue(chass[i]);
+                mot.com = pullStart + pull_difference + bodyComs[i];
+                mot.linVel = new Vector2(0f, 0f);
+                motion.SetValue(chass[i], mot);
+            }
         }
 
         public static void exit(){
@@ -90,10 +103,10 @@ namespace AngryBirds {
             Vector3 restoring3 = -1 * pull_difference * mouse_transform_scale * sling_distance_scaler;
             Vector2 restoring2 = new Vector2(restoring3.x, restoring3.y);
             PolyPhysics.Rigidbody[] bodies = (PolyPhysics.Rigidbody[])allBodies.GetValue((PolyPhysics.Vehicle)m_Physics.GetValue(GlobalManager.current_vehicle));
-            foreach(PolyPhysics.Rigidbody body in bodies){
-                Poly.Physics.Solver.Motion vehicleMotion = ((Poly.Physics.Solver.Motion)motion.GetValue(body));
+            for(int i = 0; i < bodies.Count(); i++){
+                Poly.Physics.Solver.Motion vehicleMotion = ((Poly.Physics.Solver.Motion)motion.GetValue(bodies[i]));
                 vehicleMotion.linVel = restoring2;
-                motion.SetValue(body,vehicleMotion);
+                motion.SetValue(bodies[i],vehicleMotion);
             }
             GlobalManager.controlState = ControlState.MOVING;
         }
